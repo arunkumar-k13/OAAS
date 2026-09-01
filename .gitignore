@@ -1,0 +1,29 @@
+# Python & Virtualenv
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+
+# Environment & Config
+.env
+.env.local
+
+# IDE & Editor
+.vscode/
+.idea/
+
+# Data & Output Files (Large files)
+data/
+output/
+logs/
+*.zip
+*.xml
+*.csv
+*.xlsx
+*.gz
+
+# OS specific
+Thumbs.db
+Desktop.ini

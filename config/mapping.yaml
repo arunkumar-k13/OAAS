@@ -1,0 +1,71 @@
+version: "1.0"
+description: "Mapping configuration from WHO ICD-11 API JSON to OAAS Ontology Schema"
+
+field_mappings:
+  # WHO API Field -> OAAS Field Name
+  title:
+    target: "Name"
+    type: "string"
+    default: ""
+  code:
+    target: "Term ID"
+    type: "string"
+    default: ""
+  id:
+    target: "ID"
+    type: "string"
+    default: ""
+  '@id':
+    target: "URI"
+    type: "string"
+    default: ""
+  definition:
+    target: "Definition"
+    type: "string"
+    default: ""
+  synonym:
+    target: "Synonyms"
+    type: "list"
+    default: []
+  inclusion:
+    target: "Includes"
+    type: "list"
+    default: []
+  exclusion:
+    target: "Type I Exclude"
+    type: "list"
+    default: []
+  codingNote:
+    target: "Short Description"
+    type: "string"
+    default: ""
+  longDefinition:
+    target: "Long Description"
+    type: "string"
+    default: ""
+  browserUrl:
+    target: "hasDbXref"
+    type: "list"
+    default: []
+  release:
+    target: "Version"
+    type: "string"
+    default: "ICD-11 2024-01"
+
+  # Hierarchy mappings
+  parent:
+    target: "subClassOf"
+    type: "list"
+    default: []
+  child:
+    target: "superClassOf"
+    type: "list"
+    default: []
+
+defaults:
+  Condition Group: "General"
+  Type II Exclude: []
+  Applicable To: []
+  forMapping: true
+  mcXref: []
+  PossiblePrefix: "ICD11"
