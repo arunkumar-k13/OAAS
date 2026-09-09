@@ -1,6 +1,20 @@
-# OAAS ICD-11 Ontology ETL Pipeline
+# OAAS Ontology ETL Pipeline (ICD-11, ICD-10, ICD-10-CM, MeSH & LOINC)
 
-Production-ready, scalable, and modular Python ETL pipeline designed to extract ICD-11 terminology from the official WHO ICD-11 API, transform raw payloads into the **OAAS Ontology Schema**, validate hierarchy and metadata integrity, persist everything in **MongoDB** (`oaas` database), and export clean datasets for **OAAS Lexicon Import**.
+Production-ready, scalable, and modular Python ETL pipeline designed to extract, transform, and export medical ontology datasets into the **OAAS Lexicon Schema**. Supports **WHO ICD-11**, **WHO ICD-10**, **CDC FY 2026 ICD-10-CM**, **NLM MeSH 2026**, and **Regenstrief LOINC v2.83**.
+
+Persists all transformed data in **MongoDB** (`oaas` database) and exports clean, deduplicated datasets for **OAAS Lexicon Import**.
+
+---
+
+## 📌 Supported Ontologies & Capabilities
+
+| Ontology | Source | Version / Release | Primary Entity Types | Pipeline Commands |
+| :--- | :--- | :--- | :--- | :--- |
+| **ICD-11** | WHO API | 2026 Release (MMS) | Diseases, Causes of Death | `fetch`, `transform`, `export` |
+| **ICD-10** | WHO API | 2019 Release | Chapters, Block Headers, Sub-codes | `fetch-icd10`, `transform-icd10`, `export-icd10` |
+| **ICD-10-CM** | CDC | FY 2026 Tabular Release | Category Headers, Sub-codes | `fetch-icd10cm`, `transform-icd10cm`, `export-icd10cm` |
+| **MeSH** | NLM FTP | 2026 XML Release | Descriptors (T0), Concepts (T1), Qualifiers (T2) | `fetch-mesh`, `transform-mesh`, `export-mesh` |
+| **LOINC** | Regenstrief | v2.83 (August 2026) | Observation Codes, 6-Axis Parts | `fetch-loinc`, `transform-loinc`, `export-loinc` |
 
 ---
 
@@ -10,61 +24,47 @@ Production-ready, scalable, and modular Python ETL pipeline designed to extract 
 - [Folder Structure](#folder-structure)
 - [Technology Stack](#technology-stack)
 - [Installation](#installation)
-- [Environment Variables Configuration](#environment-variables-configuration)
+- [Environment Configuration](#environment-configuration)
 - [MongoDB Setup](#mongodb-setup)
-- [WHO API Authentication](#who-api-authentication)
 - [CLI Usage & Commands](#cli-usage--commands)
-- [OAAS Ontology Schema Specification](#oaas-ontology-schema-specification)
+- [Deduplication & Quality Rules](#deduplication--quality-rules)
 - [Testing & Verification](#testing--verification)
-- [Troubleshooting & FAQ](#troubleshooting--faq)
 
 ---
 
 ## Project Architecture & Data Flow
 
-The ETL pipeline operates sequentially across 6 core collections in the `oaas` MongoDB database:
-
 ```
-                  ┌───────────────────────────────┐
-                  │       WHO ICD-11 API          │
-                  └──────────────┬────────────────┘
-                                 │ OAuth2 Auth
-                                 ▼
-                  ┌───────────────────────────────┐
-                  │    ICD11Downloader (BFS)      │
-                  └──────────────┬────────────────┘
-                                 │ Raw JSON
-                                 ▼
-                  ┌───────────────────────────────┐
-                  │    MongoDB Collection:        │
-                  │         icd11_raw             │
-                  └──────────────┬────────────────┘
-                                 │ Normalization & Mapping
-                                 ▼
-                  ┌───────────────────────────────┐
-                  │    ICD11Mapper & Hierarchy    │
-                  └──────────────┬────────────────┘
-                                 │ Mapped Terms
-                                 ▼
-                  ┌───────────────────────────────┐
-                  │    MongoDB Collections:       │
-                  │       icd11_processed         │
-                  │     ICD11_2026_ONTOLOGY       │
-                  └──────────────┬────────────────┘
-                                 │ Validation Engine
-                                 ▼
-                  ┌───────────────────────────────┐
-                  │       OntologyValidator       │
-                  └──────────────┬────────────────┘
-                                 │ Multi-Format Export
-                                 ▼
-         ┌───────────────────────┼───────────────────────┐
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│  icd11_ontology  │    │  icd11_ontology  │    │   oaas_lexicon   │
-│      .json       │    │       .csv       │    │   _import.json   │
-└──────────────────┘    └──────────────────┘    └──────────────────┘
+                   ┌─────────────────────────────────────────┐
+                   │    Data Sources (WHO / CDC / NLM / LOINC)│
+                   └────────────────────┬────────────────────┘
+                                        │ Extraction & Ingestion
+                                        ▼
+                   ┌─────────────────────────────────────────┐
+                   │       MongoDB Raw Collections           │
+                   │ (icd11_raw, mesh_2026_raw, loinc_raw)   │
+                   └────────────────────┬────────────────────┘
+                                        │ Transformation & Deduplication
+                                        ▼
+                   ┌─────────────────────────────────────────┐
+                   │     Schema Mapping & Hierarchy Builder  │
+                   │  (Pipe-merge attributes, subClassOf)    │
+                   └────────────────────┬────────────────────┘
+                                        │ Production Persistence
+                                        ▼
+                   ┌─────────────────────────────────────────┐
+                   │      MongoDB Final Collections          │
+                   │  (ICD11, ICD10CM, MESH, LOINC ONTOLOGY) │
+                   └────────────────────┬────────────────────┘
+                                        │ Multi-Format Exporter
+                                        ▼
+          ┌─────────────────────────────┼─────────────────────────────┐
+          │                             │                             │
+          ▼                             ▼                             ▼
+ ┌─────────────────┐           ┌─────────────────┐           ┌──────────────────┐
+ │  Lexicon CSVs   │           │ Multi-Sheet     │           │  JSON Artifacts  │
+ │ (0 Dupe Errors) │           │ Excel Workbooks │           │  & Reports       │
+ └─────────────────┘           └─────────────────┘           └──────────────────┘
 ```
 
 ---
@@ -76,19 +76,23 @@ OAS/
 ├── config/
 │   ├── settings.py         # Pydantic settings loading from .env
 │   ├── mapping.yaml        # YAML mapping rules for WHO -> OAAS fields
-│   └── constants.py        # Collections names, schema fields, paths
+│   └── constants.py        # Collection names, schema fields, paths
 │
 ├── extractor/
-│   ├── auth.py             # Thread-safe WHO OAuth2 token manager with caching
-│   ├── icd11_client.py     # HTTP Client with 429 rate limiting & retries
-│   ├── downloader.py       # BFS hierarchy downloader with resume checkpoints
-│   └── endpoints.py        # WHO API endpoint URL resolution
+│   ├── auth.py             # Thread-safe WHO OAuth2 token manager
+│   ├── icd11_client.py     # HTTP Client with rate limiting & retries
+│   ├── downloader.py       # BFS hierarchy downloader
+│   ├── icd10cm_xml_parser.py # CDC Tabular XML parser
+│   ├── mesh_downloader.py  # NLM MeSH XML parser (Descriptors, Concepts, Qualifiers)
+│   └── loinc_parser.py     # Regenstrief LOINC CSV/ZIP parser
 │
 ├── transformer/
-│   ├── mapper.py           # Configurable WHO JSON -> OAAS schema mapper
+│   ├── mapper.py           # WHO JSON -> OAAS schema mapper
 │   ├── hierarchy.py        # Bidirectional superClassOf / subClassOf generator
-│   ├── validator.py        # Data integrity & anomaly detection engine
-│   └── normalizer.py       # HTML unescaping, string sanitization, list parser
+│   ├── mesh_mapper.py      # MeSH term mapper & pipe-merge deduplicator
+│   ├── mesh_hierarchy.py   # MeSH Tree Number hierarchy builder
+│   ├── loinc_mapper.py     # LOINC 6-axis mapper & name deduplicator
+│   └── loinc_hierarchy.py  # LOINC component hierarchy walker
 │
 ├── database/
 │   ├── mongo.py            # PyMongo client manager & healthcheck provider
@@ -98,27 +102,28 @@ OAS/
 ├── exporter/
 │   ├── json_export.py      # Formatted JSON exporter
 │   ├── csv_export.py       # Pipe-delimited CSV exporter
-│   └── oaas_export.py      # OAAS Lexicon Import JSON container exporter
+│   ├── mesh_export.py      # MeSH multi-sheet Excel & CSV exporter
+│   └── loinc_export.py     # LOINC multi-sheet Excel & CSV exporter
 │
 ├── models/
-│   ├── icd11.py            # Raw WHO API Pydantic models
+│   ├── icd11.py            # Raw API Pydantic models
 │   ├── ontology.py         # OAASOntologyTerm Pydantic schema model
 │   └── responses.py        # TokenResponse and ValidationReport models
 │
 ├── utils/
-│   ├── logger.py           # Multi-file Loguru logging infrastructure
+│   ├── logger.py           # Structured multi-file Loguru logging infrastructure
 │   ├── helpers.py          # String sanitization & list wrapping helpers
 │   └── retry.py            # Tenacity exponential backoff decorators
 │
 ├── cli/
-│   └── commands.py         # Rich CLI command handlers
+│   └── commands.py         # Rich CLI command handlers for all 5 ontologies
 │
-├── output/                 # Exported output directory
+├── output/                 # Exported CSV, Excel, and JSON deliverables
 ├── logs/                   # Categorized log files (api.log, mongo.log, etc.)
-├── tests/                  # Pytest test suite (27 unit tests)
+├── tests/                  # Pytest test suite
 │
-├── .env                    # Environment configuration (ignored in vcs)
 ├── .env.example            # Environment configuration template
+├── .gitignore              # Git ignore configuration
 ├── requirements.txt        # Production dependencies
 ├── README.md               # Pipeline documentation
 └── main.py                 # CLI entry point
@@ -126,28 +131,15 @@ OAS/
 
 ---
 
-## Technology Stack
-
-- **Language**: Python 3.11+
-- **Database**: MongoDB (PyMongo 4.5+)
-- **Data Validation & Schemas**: Pydantic v2 & `pydantic-settings`
-- **HTTP Client**: `httpx` & `requests`
-- **Resilience**: `tenacity` (retries, rate limiting, 429 handling)
-- **CLI & UX**: `rich` (Tables, Panels, Status spinners, Progress bars)
-- **Logging**: `loguru` (Structured multi-file logging)
-- **Configuration**: `pyyaml`, `python-dotenv`
-- **Testing**: `pytest`
-
----
-
 ## Installation
 
-1. **Clone the Repository & Navigate to Workspace**:
+1. **Clone & Navigate to Workspace**:
    ```bash
-   cd OAS
+   git clone https://github.com/arunkumar-k13/OAAS.git
+   cd OAAS
    ```
 
-2. **Set Up Python Virtual Environment** (Recommended):
+2. **Set Up Virtual Environment**:
    ```bash
    python -m venv venv
    # Windows PowerShell:
@@ -163,183 +155,67 @@ OAS/
 
 ---
 
-## Environment Variables Configuration
-
-Copy `.env.example` to create your local `.env` file:
-
-```bash
-cp .env.example .env
-```
-
-Set the variables in `.env`:
-
-```ini
-# MongoDB Configuration
-MONGO_URI=mongodb://localhost:27017
-MONGO_DB_NAME=oaas
-
-# WHO ICD-11 API Credentials
-WHO_CLIENT_ID=your_who_client_id_here
-WHO_CLIENT_SECRET=your_who_client_secret_here
-WHO_AUTH_URL=https://icdaccessmanagement.who.int/connect/token
-WHO_API_BASE_URL=https://id.who.int/icd
-
-# ICD-11 Parameters
-ICD11_LINEARIZATION=mms
-ICD11_RELEASE_ID=2024-01
-ICD11_LANGUAGE=en
-
-# Performance & Rate Limits
-MAX_RETRIES=5
-REQUEST_TIMEOUT_SECONDS=30
-RATE_LIMIT_DELAY=0.2
-
-# Logging
-LOG_LEVEL=INFO
-```
-
----
-
-## MongoDB Setup
-
-Ensure MongoDB is running locally on port `27017` or update `MONGO_URI` in `.env`.
-
-The pipeline targets database **`oaas`** and manages the following 6 collections:
-- `icd11_raw`: Staging collection storing un-flattened raw WHO API JSON payloads.
-- `icd11_processed`: Intermediate collection storing mapped OAAS schema terms.
-- `ICD11_2026_ONTOLOGY`: Master collection storing the final validated ontology.
-- `mapping_logs`: Audit trail for transformation & mapping runs.
-- `validation_logs`: Detailed execution reports generated by the validation engine.
-- `import_logs`: Export and lexicon import activity logs.
-
-> [!NOTE]
-> The database name is set strictly to `oaas`. The pipeline never touches external or preprint databases.
-
----
-
-## WHO API Authentication
-
-To fetch data from WHO ICD-11 API:
-
-1. Register an account on the [WHO ICD API Portal](https://icd.who.int/icdapi).
-2. Create an Application to obtain your `Client ID` and `Client Secret`.
-3. Fill `WHO_CLIENT_ID` and `WHO_CLIENT_SECRET` in `.env`.
-
-The `WHOAuth` service (`extractor/auth.py`) automatically:
-- Obtains Bearer access tokens via Client Credentials grant.
-- Caches access tokens in memory.
-- Checks expiration timestamps (with a 60-second safety buffer).
-- Auto-refreshes tokens upon expiry or 401 Unauthorized responses.
-
----
-
 ## CLI Usage & Commands
 
 Run all pipeline commands using `main.py`:
 
-### 1. View Database Collection Statistics
+### LOINC 2026 Commands
 ```bash
-python main.py stats
+# Parse LOINC CSV or ZIP archive
+python main.py fetch-loinc
+
+# Transform to Lexicon schema with component hierarchy
+python main.py transform-loinc
+
+# Export clean CSV and Multi-Sheet Excel
+python main.py export-loinc
 ```
 
-### 2. Fetch ICD-11 Terminology from WHO API
-Recursively downloads top-level MMS chapters down through child concepts into `icd11_raw`. Supports checkpoint resume.
+### MeSH 2026 Commands
+```bash
+# Parse NLM MeSH XML files (desc2026.xml, qual2026.xml, supp2026.xml)
+python main.py fetch-mesh
+
+# Transform to Descriptors, Concepts, and Qualifiers
+python main.py transform-mesh
+
+# Export MeSH clean CSV and Excel workbooks
+python main.py export-mesh
+```
+
+### ICD-10-CM 2026 Commands
+```bash
+python main.py fetch-icd10cm
+python main.py transform-icd10cm
+python main.py export-icd10cm
+```
+
+### ICD-11 & General Commands
 ```bash
 python main.py fetch
-```
-
-### 3. Transform Raw JSON into OAAS Schema & Hierarchy
-Maps raw fields, generates bidirectional `superClassOf` and `subClassOf` links, and syncs concepts to `ICD11_2026_ONTOLOGY`.
-```bash
 python main.py transform
-```
-
-### 4. Validate Ontology Integrity & Metadata
-Executes validation metrics (missing names, missing codes, circular links, broken references) and logs reports to `validation_logs`.
-```bash
 python main.py validate
-```
-
-### 5. Export Datasets for OAAS Lexicon Import
-Generates JSON, CSV, and OAAS Lexicon Import JSON files inside the `output/` directory.
-```bash
 python main.py export
-```
-
-### 6. Reset Database Collections
-Drops all pipeline collections in `oaas` database and recreates clean indexes.
-```bash
+python main.py stats
 python main.py reset
 ```
 
 ---
 
-## OAAS Ontology Schema Specification
+## Deduplication & Quality Rules
 
-Every term exported or stored in `ICD11_2026_ONTOLOGY` follows the exact schema:
+To guarantee **0 Duplicate Import Errors** when loading data into Lexicon systems:
 
-| Field Name | Type | Description |
-| :--- | :--- | :--- |
-| **Name** | `string` | Primary concept title/label |
-| **ID** | `string` | Unique concept entity identifier |
-| **Term ID** | `string` | Short alphanumeric code (e.g. `1A00`) |
-| **URI** | `string` | Canonical WHO ICD-11 URI |
-| **Synonyms** | `list[string]` | Alternative terms or synonyms |
-| **Short Description** | `string` | Coding note or brief summary |
-| **Long Description** | `string` | Extended textual description |
-| **Condition Group** | `string` | Domain category (default: `General`) |
-| **hasDbXref** | `list[string]` | External cross-references (browser URLs) |
-| **Definition** | `string` | Formal WHO textual definition |
-| **Type I Exclude** | `list[string]` | Type I exclusion terms |
-| **Type II Exclude** | `list[string]` | Type II exclusion terms |
-| **Includes** | `list[string]` | Inclusion terms / criteria |
-| **Applicable To** | `list[string]` | Applicability constraints |
-| **forMapping** | `boolean` | Flag indicating eligibility for mapping |
-| **mcXref** | `list[string]` | Clinical cross-references |
-| **Version** | `string` | Linearization release version |
-| **PossiblePrefix** | `string` | OAAS ontology prefix code (`ICD11`) |
-| **superClassOf** | `list[string]` | Child concept URIs / IDs |
-| **subClassOf** | `list[string]` | Parent concept URIs / IDs |
+1. **Name Grouping**: Data is grouped strictly by `Name` (`molcon:Name`).
+2. **Pipe-Delimited Value Merging**: Multiple values for attributes (such as IDs, Synonyms, Example Units, UCUM Units, Tree Numbers) are combined into a single string using pipe (`|`) delimiting.
+3. **Empty Auto-Generated Fields**: `ID` and `hasDbXref` are kept blank (`""`) to allow target Lexicon systems to assign internal primary keys cleanly.
 
 ---
 
 ## Testing & Verification
 
-Run the comprehensive pytest suite covering all 10 pipeline modules:
+Run the pytest suite to verify all core components:
 
 ```bash
 python -m pytest tests/ -v
 ```
-
-Output:
-```text
-tests/test_auth.py PASSED
-tests/test_cli.py PASSED
-tests/test_client.py PASSED
-tests/test_downloader.py PASSED
-tests/test_exporters.py PASSED
-tests/test_hierarchy.py PASSED
-tests/test_init.py PASSED
-tests/test_mapper.py PASSED
-tests/test_repositories.py PASSED
-tests/test_utils.py PASSED
-tests/test_validator.py PASSED
-============================= 27 passed in 1.09s =============================
-```
-
----
-
-## Troubleshooting & FAQ
-
-#### 1. `MongoDB is unreachable!`
-- Verify MongoDB service is running (`mongod` or Docker container).
-- Check `MONGO_URI` in `.env` (default: `mongodb://localhost:27017`).
-
-#### 2. `WHO API Client ID or Client Secret is missing`
-- Ensure `.env` exists and contains valid `WHO_CLIENT_ID` and `WHO_CLIENT_SECRET`.
-
-#### 3. Rate Limit Exceeded (HTTP 429)
-- `ICD11Client` automatically inspects `Retry-After` headers and sleeps before retrying. You can also adjust `RATE_LIMIT_DELAY` in `.env`.
-
-#### 4. Resuming Interrupted Downloads
-- The downloader automatically queries `icd11_raw` for already fetched URIs before fetching. You can interrupt (`Ctrl+C`) and re-run `python main.py fetch` anytime without duplicating requests.
