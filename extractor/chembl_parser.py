@@ -1,7 +1,7 @@
 """
 ChEMBL 37 Bioactive Compounds Extractor and Parser.
 Fetches ChEMBL compound records via REST API or SQLite file and ingests into MongoDB.
-Includes chemical structures (SMILES, InChI, InChIKey), calculated properties, indications, mechanisms, and DBXref cross-references.
+Includes chemical structures (SMILES, InChI, InChIKey), trade names, target details (action type, organism, UniProt ID), indications, mechanisms, and DBXref cross-references.
 """
 
 import json
@@ -57,18 +57,26 @@ class ChEMBLParser:
                         if not chembl_id:
                             continue
 
-                        # Extract synonyms list
+                        # Extract synonyms and trade names
                         synonyms = []
+                        trade_names = []
                         for syn in mol.get("molecule_synonyms", []) or []:
                             s_name = syn.get("molecule_synonym")
-                            if s_name and s_name not in synonyms:
-                                synonyms.append(s_name)
+                            s_type = str(syn.get("syn_type") or "").upper()
+
+                            if s_name:
+                                if "TRADE" in s_type or "BRAND" in s_type:
+                                    if s_name not in trade_names:
+                                        trade_names.append(s_name)
+                                else:
+                                    if s_name not in synonyms:
+                                        synonyms.append(s_name)
 
                         # Extract structure details
                         structs = mol.get("molecule_structures") or {}
                         props = mol.get("molecule_properties") or {}
 
-                        # Extract cross references (ATC, ChemSpider, PubChem, DrugBank, etc.)
+                        # Extract cross references (PubChem, DrugBank, UniProt, ChemSpider, ATC, etc.)
                         cross_refs = []
                         for xr in mol.get("cross_references") or []:
                             src = xr.get("xref_src") or xr.get("src_id")
@@ -98,19 +106,18 @@ class ChEMBLParser:
                             "first_approval": mol.get("first_approval"),
                             "black_box_warning": mol.get("black_box_warning"),
                             "synonyms": synonyms,
+                            "trade_names": trade_names,
                             "canonical_smiles": structs.get("canonical_smiles") or "",
                             "standard_inchi": structs.get("standard_inchi") or "",
                             "standard_inchi_key": structs.get("standard_inchi_key") or "",
                             "molecular_formula": props.get("full_molformula") or "",
                             "full_mwt": props.get("full_mwt") or "",
-                            "alogp": props.get("alogp") or "",
-                            "hba": props.get("hba") or "",
-                            "hbd": props.get("hbd") or "",
-                            "psa": props.get("psa") or "",
-                            "rtb": props.get("rtb") or "",
                             "cross_references": cross_refs,
                             "indications": [],
                             "mechanisms": [],
+                            "target_action_types": [],
+                            "target_organisms": [],
+                            "target_uniprot_ids": [],
                             "targets": [],
                             "parent_chembl_id": (mol.get("molecule_hierarchy") or {}).get("parent_chembl_id"),
                         }
@@ -149,8 +156,7 @@ class ChEMBLParser:
         query = """
             SELECT md.chembl_id, md.pref_name, md.molecule_type, md.max_phase, md.first_approval,
                    md.black_box_warning, ms.canonical_smiles, ms.standard_inchi, ms.standard_inchi_key,
-                   mp.full_molformula, mp.full_mwt, mp.alogp, mp.hba, mp.hbd, mp.psa, mp.rtb,
-                   mh.parent_chembl_id
+                   mp.full_molformula, mp.full_mwt, mh.parent_chembl_id
             FROM molecule_dictionary md
             LEFT JOIN molecule_structures ms ON md.molregno = ms.molregno
             LEFT JOIN molecule_properties mp ON md.molregno = mp.molregno
@@ -167,7 +173,7 @@ class ChEMBLParser:
 
         for r in rows:
             (chembl_id, pref_name, mol_type, max_p, first_app, bb_warn,
-             smiles, inchi, inchi_key, formula, mwt, alogp, hba, hbd, psa, rtb, parent_id) = r
+             smiles, inchi, inchi_key, formula, mwt, parent_id) = r
 
             doc = {
                 "chembl_id": chembl_id,
@@ -177,19 +183,18 @@ class ChEMBLParser:
                 "first_approval": first_app,
                 "black_box_warning": bb_warn,
                 "synonyms": [],
+                "trade_names": [],
                 "canonical_smiles": smiles or "",
                 "standard_inchi": inchi or "",
                 "standard_inchi_key": inchi_key or "",
                 "molecular_formula": formula or "",
                 "full_mwt": mwt or "",
-                "alogp": alogp or "",
-                "hba": hba or "",
-                "hbd": hbd or "",
-                "psa": psa or "",
-                "rtb": rtb or "",
                 "cross_references": [],
                 "indications": [],
                 "mechanisms": [],
+                "target_action_types": [],
+                "target_organisms": [],
+                "target_uniprot_ids": [],
                 "targets": [],
                 "parent_chembl_id": parent_id,
             }

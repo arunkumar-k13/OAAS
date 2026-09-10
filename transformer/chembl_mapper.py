@@ -3,7 +3,7 @@ ChEMBL 37 Mapper and Schema Transformer.
 Transforms raw ChEMBL compound records into Lexicon-ready ontology schema.
 Groups by Name (pref_name) to guarantee zero duplicate name import errors.
 Converts Max Phase numbers to human-readable labels (4.0 -> Approved).
-Populates hasDbXref with external cross-references (ATC, ChemSpider, PubChem, DrugBank).
+Populates Trade Names, Target Action Type, Target Organism, Target UniProt ID, and DBXref cross-references.
 """
 
 import re
@@ -54,18 +54,17 @@ class ChEMBLMapper:
                     "First Approval Year": [],
                     "Black Box Warning": [],
                     "Synonyms": [],
+                    "Trade Names": [],
                     "SMILES": [],
                     "InChI": [],
                     "InChI Key": [],
                     "Molecular Formula": [],
                     "Molecular Weight": [],
-                    "AlogP": [],
-                    "HBA": [],
-                    "HBD": [],
-                    "PSA": [],
-                    "Rotatable Bonds": [],
                     "Indications": [],
                     "Mechanisms": [],
+                    "Target Action Type": [],
+                    "Target Organism": [],
+                    "Target UniProt ID": [],
                     "Biological Targets": [],
                     "Version": "ChEMBL 37",
                     "mcXref": "",  # Strictly blank
@@ -104,18 +103,19 @@ class ChEMBLMapper:
             self._append_unique(entry, "InChI Key", doc.get("standard_inchi_key"))
             self._append_unique(entry, "Molecular Formula", doc.get("molecular_formula"))
             self._append_unique(entry, "Molecular Weight", doc.get("full_mwt"))
-            self._append_unique(entry, "AlogP", doc.get("alogp"))
-            self._append_unique(entry, "HBA", doc.get("hba"))
-            self._append_unique(entry, "HBD", doc.get("hbd"))
-            self._append_unique(entry, "PSA", doc.get("psa"))
-            self._append_unique(entry, "Rotatable Bonds", doc.get("rtb"))
 
-            # Synonyms
+            # Synonyms & Trade Names
             syns = doc.get("synonyms") or []
             if isinstance(syns, str):
                 syns = [syns]
             for syn in syns:
                 self._append_unique(entry, "Synonyms", syn)
+
+            trades = doc.get("trade_names") or []
+            if isinstance(trades, str):
+                trades = [trades]
+            for tr in trades:
+                self._append_unique(entry, "Trade Names", tr)
 
             # External Cross-References (hasDbXref)
             xrefs = doc.get("cross_references") or []
@@ -131,14 +131,31 @@ class ChEMBLMapper:
             for ind in inds:
                 self._append_unique(entry, "Indications", ind)
 
-            # Mechanisms
+            # Mechanisms & Target details
             mechs = doc.get("mechanisms") or []
             if isinstance(mechs, str):
                 mechs = [mechs]
             for m in mechs:
                 self._append_unique(entry, "Mechanisms", m)
 
-            # Targets
+            act_types = doc.get("target_action_types") or []
+            if isinstance(act_types, str):
+                act_types = [act_types]
+            for at in act_types:
+                self._append_unique(entry, "Target Action Type", at)
+
+            orgs = doc.get("target_organisms") or []
+            if isinstance(orgs, str):
+                orgs = [orgs]
+            for og in orgs:
+                self._append_unique(entry, "Target Organism", og)
+
+            uids = doc.get("target_uniprot_ids") or []
+            if isinstance(uids, str):
+                uids = [uids]
+            for uid in uids:
+                self._append_unique(entry, "Target UniProt ID", uid)
+
             targets = doc.get("targets") or []
             if isinstance(targets, str):
                 targets = [targets]
