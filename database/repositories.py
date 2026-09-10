@@ -19,6 +19,9 @@ from config.constants import (
     COLLECTION_LOINC_RAW,
     COLLECTION_LOINC_PROCESSED,
     COLLECTION_LOINC_ONTOLOGY,
+    COLLECTION_CHEMBL_RAW,
+    COLLECTION_CHEMBL_PROCESSED,
+    COLLECTION_CHEMBL_ONTOLOGY,
     COLLECTION_MAPPING_LOGS,
     COLLECTION_VALIDATION_LOGS,
     COLLECTION_IMPORT_LOGS,
@@ -264,6 +267,30 @@ class LOINCFinalRepository(FinalOntologyRepository):
         self.collection = self.db[COLLECTION_LOINC_ONTOLOGY]
         self.collection_name = COLLECTION_LOINC_ONTOLOGY
         self.processed_repo = LOINCProcessedRepository(db)
+
+
+class ChEMBLRawRepository(BaseRepository):
+    """Repository for storing and querying raw ChEMBL 37 compound documents."""
+
+    def __init__(self, db: Optional[Database] = None):
+        super().__init__(COLLECTION_CHEMBL_RAW, db)
+
+
+class ChEMBLProcessedRepository(ProcessedOntologyRepository):
+    """Repository for storing transformed ChEMBL 37 compound terms."""
+
+    def __init__(self, db: Optional[Database] = None):
+        BaseRepository.__init__(self, COLLECTION_CHEMBL_PROCESSED, db)
+
+
+class ChEMBLFinalRepository(FinalOntologyRepository):
+    """Repository for querying final ChEMBL 37 ontology collection."""
+
+    def __init__(self, db: Optional[Database] = None):
+        super().__init__(db)
+        self.collection = self.db[COLLECTION_CHEMBL_ONTOLOGY]
+        self.collection_name = COLLECTION_CHEMBL_ONTOLOGY
+        self.processed_repo = ChEMBLProcessedRepository(db)
 
 
 class LoggingRepository:

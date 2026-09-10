@@ -624,3 +624,125 @@ def handle_export_loinc():
 
     console.print(table)
 
+
+# =====================================================================
+# ChEMBL 37 CLI Command Handlers
+# =====================================================================
+
+def handle_fetch_chembl(filepath: Optional[str] = None, limit: Optional[int] = 200):
+    """Fetch/Parse ChEMBL 37 bioactive compound release data into MongoDB."""
+    console.print(Panel("[bold cyan]EMBL-EBI ChEMBL 37 Parser & Extractor[/bold cyan]", expand=False))
+    if not db_healthcheck():
+        console.print("[bold red]Error: MongoDB is unreachable![/bold red]")
+        sys.exit(1)
+
+    from extractor.chembl_parser import ChEMBLParser
+    from pathlib import Path
+
+    start_time = time.time()
+    parser = ChEMBLParser()
+
+    if filepath:
+        path_obj = Path(filepath)
+        count = parser.parse_sqlite_file(path_obj, limit=limit)
+    else:
+        # Check if local chembl_37.db exists
+        data_dir = Path(r"c:\Users\arun.kumar\Desktop\MC\OAS\data\chembl")
+        db_candidates = list(data_dir.glob("*.db"))
+        if db_candidates:
+            console.print(f"[dim]Found local ChEMBL SQLite file: {db_candidates[0]}[/dim]")
+            count = parser.parse_sqlite_file(db_candidates[0], limit=limit)
+        else:
+            console.print(f"[dim]No local SQLite file found in {data_dir}. Fetching sample chunk via ChEMBL REST API...[/dim]")
+            count = parser.fetch_sample_chunk(limit=limit or 200)
+
+    elapsed = time.time() - start_time
+    console.print(f"[bold green]ChEMBL fetch/parse completed! {count:,} compound records stored in {elapsed:.2f}s.[/bold green]")
+
+
+def handle_transform_chembl():
+    """Transform raw ChEMBL data into Lexicon-ready ontology schema with salt hierarchy."""
+    console.print(Panel("[bold magenta]ChEMBL 37 Schema Transformer & Hierarchy Generator[/bold magenta]", expand=False))
+    if not db_healthcheck():
+        console.print("[bold red]Error: MongoDB is unreachable![/bold red]")
+        sys.exit(1)
+
+    from config.constants import COLLECTION_CHEMBL_RAW, COLLECTION_CHEMBL_PROCESSED, COLLECTION_CHEMBL_ONTOLOGY
+    from transformer.chembl_mapper import ChEMBLMapper
+    from transformer.chembl_hierarchy import ChEMBLHierarchyGenerator
+
+    start_time = time.time()
+    db = get_db()
+    raw_col = db[COLLECTION_CHEMBL_RAW]
+    processed_col = db[COLLECTION_CHEMBL_PROCESSED]
+    final_col = db[COLLECTION_CHEMBL_ONTOLOGY]
+
+    with Status("[bold cyan]Fetching raw ChEMBL documents...", console=console):
+        raw_docs = list(raw_col.find({}, {"_id": 0}))
+
+    if not raw_docs:
+        console.print("[yellow]No raw ChEMBL documents found. Please run `python main.py fetch-chembl` first.[/yellow]")
+        return
+
+    console.print(f"[dim]Found {len(raw_docs):,} raw ChEMBL documents.[/dim]")
+
+    with Status(f"[bold cyan]Mapping {len(raw_docs):,} raw ChEMBL documents to Lexicon schema...", console=console):
+        mapper = ChEMBLMapper()
+        mapped_terms = mapper.transform_batch(raw_docs)
+
+    with Status("[bold cyan]Generating ChEMBL salt hierarchy links...", console=console):
+        hierarchy_gen = ChEMBLHierarchyGenerator(db=db)
+        linked_terms = hierarchy_gen.build_bidirectional_links(mapped_terms)
+
+    with Status("[bold cyan]Persisting ChEMBL terms to MongoDB...", console=console):
+        processed_col.delete_many({})
+        final_col.delete_many({})
+
+        if linked_terms:
+            batch_size = 10000
+            for i in range(0, len(linked_terms), batch_size):
+                batch = linked_terms[i:i + batch_size]
+                processed_col.insert_many(batch)
+                final_col.insert_many([dict(t) for t in batch])
+
+    elapsed = time.time() - start_time
+    console.print(f"[bold green]ChEMBL Transformation complete! {len(linked_terms):,} unique terms mapped and synced in {elapsed:.2f}s.[/bold green]")
+
+
+def handle_export_chembl():
+    """Export transformed ChEMBL 37 ontology to CSV and Multi-Sheet Excel."""
+    console.print(Panel("[bold green]ChEMBL 37 Ontology Exporter[/bold green]", expand=False))
+    if not db_healthcheck():
+        console.print("[bold red]Error: MongoDB is unreachable![/bold red]")
+        sys.exit(1)
+
+    from config.constants import COLLECTION_CHEMBL_ONTOLOGY, OUTPUT_DIR
+    from exporter.chembl_export import export_chembl_csv, export_chembl_excel
+
+    db = get_db()
+    final_col = db[COLLECTION_CHEMBL_ONTOLOGY]
+
+    with Status("[bold cyan]Querying CHEMBL_37_ONTOLOGY collection...", console=console):
+        terms = list(final_col.find({}, {"_id": 0}))
+
+    if not terms:
+        console.print("[yellow]No terms found in `CHEMBL_37_ONTOLOGY`. Please run `python main.py transform-chembl` first.[/yellow]")
+        return
+
+    console.print(f"[dim]Exporting {len(terms):,} ChEMBL compound terms...[/dim]")
+
+    with Status("[bold cyan]Exporting ChEMBL CSV...", console=console):
+        csv_path = export_chembl_csv(terms)
+
+    with Status("[bold cyan]Exporting ChEMBL Multi-Sheet Excel...", console=console):
+        excel_path = export_chembl_excel(terms)
+
+    table = Table(title=f"ChEMBL 37 Export Summary ({len(terms):,} Terms Exported)")
+    table.add_column("Export Format", style="cyan")
+    table.add_column("File Path", style="green")
+    table.add_row("Deduplicated CSV", str(csv_path))
+    table.add_row("Multi-Sheet Excel", str(excel_path))
+
+    console.print(table)
+
+

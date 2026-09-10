@@ -1,5 +1,5 @@
 """
-Main CLI entry point for OAAS ICD-11, ICD-10, ICD-10-CM, MeSH, and LOINC Ontology ETL Pipeline.
+Main CLI entry point for OAAS ICD-11, ICD-10, ICD-10-CM, MeSH, LOINC, and ChEMBL Ontology ETL Pipeline.
 """
 
 import argparse
@@ -23,12 +23,15 @@ from cli.commands import (
     handle_fetch_loinc,
     handle_transform_loinc,
     handle_export_loinc,
+    handle_fetch_chembl,
+    handle_transform_chembl,
+    handle_export_chembl,
 )
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="OAAS ICD-11, ICD-10, MeSH & LOINC Ontology ETL Pipeline CLI"
+        description="OAAS ICD-11, ICD-10, MeSH, LOINC & ChEMBL Ontology ETL Pipeline CLI"
     )
     subparsers = parser.add_subparsers(dest="command", help="Pipeline commands")
 
@@ -71,6 +74,23 @@ def main():
     subparsers.add_parser("transform-loinc", help="Transform raw LOINC into Lexicon-ready ontology schema")
     subparsers.add_parser("export-loinc", help="Export LOINC ontology to CSV and Multi-Sheet Excel")
 
+    # ChEMBL 37 Commands
+    chembl_fetch_parser = subparsers.add_parser("fetch-chembl", help="Fetch/Parse EMBL-EBI ChEMBL 37 bioactive compounds")
+    chembl_fetch_parser.add_argument(
+        "--filepath",
+        type=str,
+        default=None,
+        help="Optional path to local ChEMBL SQLite file (e.g., chembl_37.db)",
+    )
+    chembl_fetch_parser.add_argument(
+        "--limit",
+        type=int,
+        default=200,
+        help="Sample limit for test chunks (default: 200)",
+    )
+    subparsers.add_parser("transform-chembl", help="Transform raw ChEMBL into Lexicon-ready ontology schema")
+    subparsers.add_parser("export-chembl", help="Export ChEMBL ontology to CSV and Multi-Sheet Excel")
+
     subparsers.add_parser("stats", help="Display MongoDB collection document statistics")
     subparsers.add_parser("reset", help="Clear all collections in database")
 
@@ -108,6 +128,12 @@ def main():
         handle_transform_loinc()
     elif args.command == "export-loinc":
         handle_export_loinc()
+    elif args.command == "fetch-chembl":
+        handle_fetch_chembl(filepath=args.filepath, limit=args.limit)
+    elif args.command == "transform-chembl":
+        handle_transform_chembl()
+    elif args.command == "export-chembl":
+        handle_export_chembl()
     elif args.command == "stats":
         handle_stats()
     elif args.command == "reset":

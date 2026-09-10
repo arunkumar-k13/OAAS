@@ -40,6 +40,11 @@ COLLECTION_LOINC_RAW = "loinc_2026_raw"
 COLLECTION_LOINC_PROCESSED = "loinc_2026_processed"
 COLLECTION_LOINC_ONTOLOGY = "LOINC_2026_ONTOLOGY"
 
+# ChEMBL MongoDB Collections (EMBL-EBI ChEMBL 37 Release)
+COLLECTION_CHEMBL_RAW = "chembl_37_raw"
+COLLECTION_CHEMBL_PROCESSED = "chembl_37_processed"
+COLLECTION_CHEMBL_ONTOLOGY = "CHEMBL_37_ONTOLOGY"
+
 COLLECTION_MAPPING_LOGS = "mapping_logs"
 COLLECTION_VALIDATION_LOGS = "validation_logs"
 COLLECTION_IMPORT_LOGS = "import_logs"
@@ -60,6 +65,9 @@ ALL_COLLECTIONS = [
     COLLECTION_LOINC_RAW,
     COLLECTION_LOINC_PROCESSED,
     COLLECTION_LOINC_ONTOLOGY,
+    COLLECTION_CHEMBL_RAW,
+    COLLECTION_CHEMBL_PROCESSED,
+    COLLECTION_CHEMBL_ONTOLOGY,
     COLLECTION_MAPPING_LOGS,
     COLLECTION_VALIDATION_LOGS,
     COLLECTION_IMPORT_LOGS,
@@ -194,6 +202,39 @@ LOINC_FIELDS = [
     "Synonyms",
     "Long Description",
     "Units Required",
+    "Version",
+    "mcXref",
+    "forMapping",
+    "hasDbXref",
+    "PossiblePrefix",
+    "superClassOf",
+    "subClassOf",
+]
+
+# ChEMBL Bioactive Compounds Attributes (Lexicon Schema)
+CHEMBL_FIELDS = [
+    "Name",
+    "ID",
+    "Term ID",
+    "URI",
+    "Molecule Type",
+    "Max Phase",
+    "First Approval Year",
+    "Black Box Warning",
+    "Synonyms",
+    "SMILES",
+    "InChI",
+    "InChI Key",
+    "Molecular Formula",
+    "Molecular Weight",
+    "AlogP",
+    "HBA",
+    "HBD",
+    "PSA",
+    "Rotatable Bonds",
+    "Indications",
+    "Mechanisms",
+    "Biological Targets",
     "Version",
     "mcXref",
     "forMapping",
