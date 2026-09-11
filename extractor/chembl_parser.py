@@ -24,21 +24,27 @@ class ChEMBLParser:
         self.db = db if db is not None else get_db()
         self.raw_col = self.db[COLLECTION_CHEMBL_RAW]
 
-    def fetch_sample_chunk(self, limit: int = 200, max_phase: Optional[int] = 4) -> int:
+    def fetch_sample_chunk(self, limit: Optional[int] = 200, max_phase: Optional[int] = 4) -> int:
         """
-        Fetch a test sample chunk of compounds via ChEMBL REST API.
+        Fetch compound records via ChEMBL REST API.
+
+        Args:
+            limit: Limit compound count (if 0 or None, fetches all compounds).
+            max_phase: Filter by clinical phase (default: 4 = Approved Drugs).
         """
-        api_logger.info(f"Fetching sample chunk of {limit} ChEMBL compounds (max_phase={max_phase})...")
+        fetch_all = limit is None or limit <= 0
+        limit_desc = "ALL" if fetch_all else str(limit)
+        api_logger.info(f"Fetching ChEMBL compounds (max_phase={max_phase}, limit={limit_desc})...")
         self.raw_col.delete_many({})
 
         raw_docs = []
         offset = 0
-        batch_size = min(limit, 100)
+        batch_size = 100
         headers = {"Accept": "application/json"}
 
         with requests.Session() as session:
             session.headers.update(headers)
-            while len(raw_docs) < limit:
+            while fetch_all or len(raw_docs) < limit:
                 url = f"{self.BASE_API_URL}/molecule?limit={batch_size}&offset={offset}"
                 if max_phase is not None:
                     url += f"&max_phase={max_phase}"
@@ -123,11 +129,11 @@ class ChEMBLParser:
                         }
 
                         raw_docs.append(doc)
-                        if len(raw_docs) >= limit:
+                        if not fetch_all and len(raw_docs) >= limit:
                             break
 
                     offset += len(molecules)
-                    api_logger.info(f"Fetched {len(raw_docs)} / {limit} sample compounds...")
+                    api_logger.info(f"Fetched {len(raw_docs)} ChEMBL compounds...")
 
                 except Exception as e:
                     api_logger.error(f"Error fetching ChEMBL API page at offset {offset}: {e}")
