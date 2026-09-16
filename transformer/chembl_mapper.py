@@ -32,7 +32,11 @@ class ChEMBLMapper:
         Transform raw ChEMBL documents into mapped Lexicon schemas grouped by Name.
         Deduplication: Groups by pref_name (Name) and pipe-merges all distinct attribute values.
         """
-        mapping_logger.info(f"Transforming {len(raw_documents)} raw ChEMBL compound records...")
+        try:
+            total_count = f"{len(raw_documents):,}"
+        except TypeError:
+            total_count = "streaming"
+        mapping_logger.info(f"Transforming {total_count} raw ChEMBL compound records...")
 
         grouped = {}
 
@@ -47,147 +51,102 @@ class ChEMBLMapper:
                 grouped[name] = {
                     "Name": name,
                     "ID": "",  # Blank for Lexicon auto-generation
-                    "Term ID": [],
-                    "URI": [],
-                    "Molecule Type": [],
-                    "Max Phase": [],
-                    "First Approval Year": [],
-                    "Black Box Warning": [],
-                    "Synonyms": [],
-                    "Trade Names": [],
-                    "SMILES": [],
-                    "InChI": [],
-                    "InChI Key": [],
-                    "Molecular Formula": [],
-                    "Molecular Weight": [],
-                    "Indications": [],
-                    "Mechanisms": [],
-                    "Target Action Type": [],
-                    "Target Organism": [],
-                    "Target UniProt ID": [],
-                    "Biological Targets": [],
+                    "Term ID": set(),
+                    "URI": set(),
+                    "Molecule Type": set(),
+                    "Max Phase": set(),
+                    "First Approval Year": set(),
+                    "Black Box Warning": set(),
+                    "Synonyms": set(),
+                    "Trade Names": set(),
+                    "SMILES": set(),
+                    "InChI": set(),
+                    "InChI Key": set(),
+                    "Molecular Formula": set(),
+                    "Molecular Weight": set(),
+                    "Indications": set(),
+                    "Mechanisms": set(),
+                    "Target Action Type": set(),
+                    "Target Organism": set(),
+                    "Target UniProt ID": set(),
+                    "Biological Targets": set(),
                     "Version": "ChEMBL 37",
                     "mcXref": "",  # Strictly blank
                     "forMapping": "True",
-                    "hasDbXref": [],  # Populated with external cross-references
+                    "hasDbXref": set(),  # Populated with external cross-references
                     "PossiblePrefix": "ChEMBL",
-                    "superClassOf": [],
-                    "subClassOf": [],
+                    "superClassOf": set(),
+                    "subClassOf": set(),
                 }
 
             entry = grouped[name]
 
-            # Term ID: CHEMBL_ID
+            # Term ID & URI
             if chembl_id:
-                term_id_str = f"{chembl_id}|ChEMBL:{chembl_id}"
-                if term_id_str not in entry["Term ID"]:
-                    entry["Term ID"].append(term_id_str)
+                entry["Term ID"].add(f"{chembl_id}|ChEMBL:{chembl_id}")
+                entry["URI"].add(f"https://www.ebi.ac.uk/chembl/compound_report_card/{chembl_id}/")
 
-                # URI
-                uri_str = f"https://www.ebi.ac.uk/chembl/compound_report_card/{chembl_id}/"
-                if uri_str not in entry["URI"]:
-                    entry["URI"].append(uri_str)
+            # Map single attributes
+            self._add_to_set(entry["Molecule Type"], doc.get("molecule_type"))
 
-            # Map fields
-            self._append_unique(entry, "Molecule Type", doc.get("molecule_type"))
-
-            # Format Max Phase float -> readable label ("Approved", "Phase I", etc.)
             raw_phase = str(doc.get("max_phase") or "").strip()
             phase_label = self.PHASE_MAP.get(raw_phase, raw_phase)
-            self._append_unique(entry, "Max Phase", phase_label)
+            self._add_to_set(entry["Max Phase"], phase_label)
 
-            self._append_unique(entry, "First Approval Year", doc.get("first_approval"))
-            self._append_unique(entry, "Black Box Warning", doc.get("black_box_warning"))
-            self._append_unique(entry, "SMILES", doc.get("canonical_smiles"))
-            self._append_unique(entry, "InChI", doc.get("standard_inchi"))
-            self._append_unique(entry, "InChI Key", doc.get("standard_inchi_key"))
-            self._append_unique(entry, "Molecular Formula", doc.get("molecular_formula"))
-            self._append_unique(entry, "Molecular Weight", doc.get("full_mwt"))
+            self._add_to_set(entry["First Approval Year"], doc.get("first_approval"))
+            self._add_to_set(entry["Black Box Warning"], doc.get("black_box_warning"))
+            self._add_to_set(entry["SMILES"], doc.get("canonical_smiles"))
+            self._add_to_set(entry["InChI"], doc.get("standard_inchi"))
+            self._add_to_set(entry["InChI Key"], doc.get("standard_inchi_key"))
+            self._add_to_set(entry["Molecular Formula"], doc.get("molecular_formula"))
+            self._add_to_set(entry["Molecular Weight"], doc.get("full_mwt"))
 
-            # Synonyms & Trade Names
-            syns = doc.get("synonyms") or []
-            if isinstance(syns, str):
-                syns = [syns]
-            for syn in syns:
-                self._append_unique(entry, "Synonyms", syn)
-
-            trades = doc.get("trade_names") or []
-            if isinstance(trades, str):
-                trades = [trades]
-            for tr in trades:
-                self._append_unique(entry, "Trade Names", tr)
-
-            # External Cross-References (hasDbXref)
-            xrefs = doc.get("cross_references") or []
-            if isinstance(xrefs, str):
-                xrefs = [xrefs]
-            for xr in xrefs:
-                self._append_unique(entry, "hasDbXref", xr)
-
-            # Indications
-            inds = doc.get("indications") or []
-            if isinstance(inds, str):
-                inds = [inds]
-            for ind in inds:
-                self._append_unique(entry, "Indications", ind)
-
-            # Mechanisms & Target details
-            mechs = doc.get("mechanisms") or []
-            if isinstance(mechs, str):
-                mechs = [mechs]
-            for m in mechs:
-                self._append_unique(entry, "Mechanisms", m)
-
-            act_types = doc.get("target_action_types") or []
-            if isinstance(act_types, str):
-                act_types = [act_types]
-            for at in act_types:
-                self._append_unique(entry, "Target Action Type", at)
-
-            orgs = doc.get("target_organisms") or []
-            if isinstance(orgs, str):
-                orgs = [orgs]
-            for og in orgs:
-                self._append_unique(entry, "Target Organism", og)
-
-            uids = doc.get("target_uniprot_ids") or []
-            if isinstance(uids, str):
-                uids = [uids]
-            for uid in uids:
-                self._append_unique(entry, "Target UniProt ID", uid)
-
-            targets = doc.get("targets") or []
-            if isinstance(targets, str):
-                targets = [targets]
-            for tgt in targets:
-                self._append_unique(entry, "Biological Targets", tgt)
+            # Map list attributes
+            self._add_list_to_set(entry["Synonyms"], doc.get("synonyms"))
+            self._add_list_to_set(entry["Trade Names"], doc.get("trade_names"))
+            self._add_list_to_set(entry["hasDbXref"], doc.get("cross_references"))
+            self._add_list_to_set(entry["Indications"], doc.get("indications"))
+            self._add_list_to_set(entry["Mechanisms"], doc.get("mechanisms"))
+            self._add_list_to_set(entry["Target Action Type"], doc.get("target_action_types"))
+            self._add_list_to_set(entry["Target Organism"], doc.get("target_organisms"))
+            self._add_list_to_set(entry["Target UniProt ID"], doc.get("target_uniprot_ids"))
+            self._add_list_to_set(entry["Biological Targets"], doc.get("targets"))
 
         # Clean and format pipe-joined strings
         transformed_terms = []
         for name, entry in grouped.items():
             cleaned_term = {}
             for k, v in entry.items():
-                if isinstance(v, list):
-                    clean_items = []
-                    for item in v:
-                        if item and str(item).strip():
-                            parts = [p.strip() for p in re.split(r"\|+", str(item)) if p.strip()]
-                            for p in parts:
-                                if p not in clean_items:
-                                    clean_items.append(p)
-                    cleaned_term[k] = "|".join(clean_items)
+                if isinstance(v, set):
+                    cleaned_term[k] = "|".join(sorted(v))
                 else:
                     cleaned_term[k] = str(v).strip()
             transformed_terms.append(cleaned_term)
 
-        mapping_logger.info(f"Transformed into {len(transformed_terms)} clean, unique ChEMBL compound terms.")
+        mapping_logger.info(f"Transformed into {len(transformed_terms):,} clean, unique ChEMBL compound terms.")
         return transformed_terms
 
     @staticmethod
-    def _append_unique(entry: Dict, field: str, value) -> None:
-        """Append a non-empty value to a list field if not already present."""
-        if value is None:
+    def _add_to_set(s: set, val) -> None:
+        """Add non-empty string value to set."""
+        if val is not None:
+            v_str = str(val).strip()
+            if v_str:
+                s.add(v_str)
+
+    @staticmethod
+    def _add_list_to_set(s: set, val_list) -> None:
+        """Add list or pipe-separated string values to set."""
+        if not val_list:
             return
-        val_str = str(value).strip()
-        if val_str and val_str not in entry[field]:
-            entry[field].append(val_str)
+        if isinstance(val_list, str):
+            val_list = [val_list]
+        for v in val_list:
+            if v is not None:
+                v_str = str(v).strip()
+                if v_str:
+                    for part in v_str.split("|"):
+                        p_clean = part.strip()
+                        if p_clean:
+                            s.add(p_clean)
+
