@@ -34,12 +34,12 @@ class ChEMBLParser:
         raw_docs = []
         offset = 0
         batch_size = min(limit, 100)
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/json", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
         with requests.Session() as session:
             session.headers.update(headers)
             while len(raw_docs) < limit:
-                url = f"{self.BASE_API_URL}/molecule?limit={batch_size}&offset={offset}"
+                url = f"{self.BASE_API_URL}/molecule?format=json&limit={batch_size}&offset={offset}"
                 if max_phase is not None:
                     url += f"&max_phase={max_phase}"
 
@@ -139,7 +139,7 @@ class ChEMBLParser:
 
         return len(raw_docs)
 
-    def parse_sqlite_file(self, db_filepath: Path, limit: Optional[int] = None, max_phase: Optional[int] = None) -> int:
+    def parse_sqlite_file(self, db_filepath: Path, limit: Optional[int] = None) -> int:
         """
         Parse local ChEMBL SQLite database file (chembl_37.db).
         """
@@ -147,75 +147,24 @@ class ChEMBLParser:
             api_logger.error(f"ChEMBL SQLite file not found at: {db_filepath}")
             raise FileNotFoundError(f"ChEMBL SQLite file not found: {db_filepath}")
 
-        api_logger.info(f"Parsing ChEMBL SQLite database from: {db_filepath} (max_phase={max_phase}, limit={limit})")
+        api_logger.info(f"Parsing ChEMBL SQLite database from: {db_filepath}")
         self.raw_col.delete_many({})
 
         conn = sqlite3.connect(str(db_filepath))
         cursor = conn.cursor()
 
-        # 1. Bulk load synonyms & trade names
-        api_logger.info("Loading synonyms and trade names from SQLite...")
-        syns_map = {}
-        trades_map = {}
-        cursor.execute("SELECT molregno, synonyms, syn_type FROM molecule_synonyms")
-        for molregno, syn, stype in cursor.fetchall():
-            if not syn:
-                continue
-            stype_str = str(stype or "").upper()
-            if "TRADE" in stype_str or "BRAND" in stype_str:
-                trades_map.setdefault(molregno, []).append(syn)
-            else:
-                syns_map.setdefault(molregno, []).append(syn)
-
-        # 2. Bulk load indications
-        api_logger.info("Loading indications from SQLite...")
-        ind_map = {}
-        cursor.execute("SELECT molregno, mesh_heading FROM drug_indication")
-        for molregno, heading in cursor.fetchall():
-            if heading:
-                ind_map.setdefault(molregno, []).append(heading)
-
-        # 3. Bulk load mechanisms & action types
-        api_logger.info("Loading mechanisms from SQLite...")
-        mech_map = {}
-        act_map = {}
-        cursor.execute("SELECT molregno, mechanism_of_action, action_type FROM drug_mechanism")
-        for molregno, moa, act in cursor.fetchall():
-            if moa:
-                mech_map.setdefault(molregno, []).append(moa)
-            if act:
-                act_map.setdefault(molregno, []).append(act)
-
-        # 4. Bulk load ATC codes
-        api_logger.info("Loading ATC classifications from SQLite...")
-        atc_map = {}
-        cursor.execute("SELECT molregno, level5 FROM molecule_atc_classification")
-        for molregno, atc in cursor.fetchall():
-            if atc:
-                atc_map.setdefault(molregno, []).append(f"ATC:{atc}")
-
-        # 5. Execute main compound query
         query = """
-            SELECT md.molregno, md.chembl_id, md.pref_name, md.molecule_type, md.max_phase, md.first_approval,
+            SELECT md.chembl_id, md.pref_name, md.molecule_type, md.max_phase, md.first_approval,
                    md.black_box_warning, ms.canonical_smiles, ms.standard_inchi, ms.standard_inchi_key,
-                   mp.full_molformula, mp.full_mwt, mh2.chembl_id AS parent_chembl_id
+                   mp.full_molformula, mp.full_mwt, mh.parent_chembl_id
             FROM molecule_dictionary md
-            LEFT JOIN compound_structures ms ON md.molregno = ms.molregno
-            LEFT JOIN compound_properties mp ON md.molregno = mp.molregno
+            LEFT JOIN molecule_structures ms ON md.molregno = ms.molregno
+            LEFT JOIN molecule_properties mp ON md.molregno = mp.molregno
             LEFT JOIN molecule_hierarchy mh ON md.molregno = mh.molregno
-            LEFT JOIN molecule_dictionary mh2 ON mh.parent_molregno = mh2.molregno
         """
-        where_clauses = []
-        if max_phase is not None:
-            where_clauses.append(f"md.max_phase >= {max_phase}")
-
-        if where_clauses:
-            query += " WHERE " + " AND ".join(where_clauses)
-
-        if limit and limit > 0:
+        if limit:
             query += f" LIMIT {limit}"
 
-        api_logger.info("Executing compound query...")
         cursor.execute(query)
         rows = cursor.fetchall()
 
@@ -223,7 +172,7 @@ class ChEMBLParser:
         batch_size = 5000
 
         for r in rows:
-            (molregno, chembl_id, pref_name, mol_type, max_p, first_app, bb_warn,
+            (chembl_id, pref_name, mol_type, max_p, first_app, bb_warn,
              smiles, inchi, inchi_key, formula, mwt, parent_id) = r
 
             doc = {
@@ -233,21 +182,21 @@ class ChEMBLParser:
                 "max_phase": max_p,
                 "first_approval": first_app,
                 "black_box_warning": bb_warn,
-                "synonyms": syns_map.get(molregno, []),
-                "trade_names": trades_map.get(molregno, []),
+                "synonyms": [],
+                "trade_names": [],
                 "canonical_smiles": smiles or "",
                 "standard_inchi": inchi or "",
                 "standard_inchi_key": inchi_key or "",
                 "molecular_formula": formula or "",
                 "full_mwt": mwt or "",
-                "cross_references": atc_map.get(molregno, []),
-                "indications": ind_map.get(molregno, []),
-                "mechanisms": mech_map.get(molregno, []),
-                "target_action_types": act_map.get(molregno, []),
+                "cross_references": [],
+                "indications": [],
+                "mechanisms": [],
+                "target_action_types": [],
                 "target_organisms": [],
                 "target_uniprot_ids": [],
                 "targets": [],
-                "parent_chembl_id": parent_id or chembl_id,
+                "parent_chembl_id": parent_id,
             }
 
             raw_docs.append(doc)
@@ -261,6 +210,5 @@ class ChEMBLParser:
 
         conn.close()
         total = self.raw_col.count_documents({})
-        api_logger.info(f"Total ChEMBL raw documents stored in MongoDB: {total:,}")
+        api_logger.info(f"Total ChEMBL raw documents in MongoDB: {total:,}")
         return total
-

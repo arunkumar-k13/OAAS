@@ -85,14 +85,8 @@ def main():
     chembl_fetch_parser.add_argument(
         "--limit",
         type=int,
-        default=None,
-        help="Sample limit for test chunks (default: None for all)",
-    )
-    chembl_fetch_parser.add_argument(
-        "--max-phase",
-        type=int,
-        default=None,
-        help="Minimum max_phase filter (e.g., 1 for Clinical Phase I+, 4 for Approved)",
+        default=200,
+        help="Sample limit for test chunks (default: 200)",
     )
     subparsers.add_parser("transform-chembl", help="Transform raw ChEMBL into Lexicon-ready ontology schema")
     subparsers.add_parser("export-chembl", help="Export ChEMBL ontology to CSV and Multi-Sheet Excel")
@@ -135,7 +129,7 @@ def main():
     elif args.command == "export-loinc":
         handle_export_loinc()
     elif args.command == "fetch-chembl":
-        handle_fetch_chembl(filepath=args.filepath, limit=args.limit, max_phase=args.max_phase)
+        handle_fetch_chembl(filepath=args.filepath, limit=args.limit)
     elif args.command == "transform-chembl":
         handle_transform_chembl()
     elif args.command == "export-chembl":
