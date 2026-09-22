@@ -9,6 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_DIR = BASE_DIR / "config"
 LOGS_DIR = BASE_DIR / "logs"
 OUTPUT_DIR = BASE_DIR / "output"
+DATA_DIR = BASE_DIR / "data"
 
 # Configuration Files
 MAPPING_YAML_PATH = CONFIG_DIR / "mapping.yaml"

@@ -14,12 +14,13 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-# Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(BASE_DIR))
 
 from database.mongo import get_db
-from config.constants import OUTPUT_DIR, DATA_DIR
+from config.constants import OUTPUT_DIR
 
+DATA_DIR = BASE_DIR / "data"
 # Path to local ChEMBL SQLite database
 SQLITE_DB_PATH = DATA_DIR / "chembl_37_sqlite" / "chembl_37" / "chembl_37_sqlite" / "chembl_37.db"
 
