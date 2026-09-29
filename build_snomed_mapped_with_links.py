@@ -354,15 +354,6 @@ for c in CONCEPTS:
     row_data = [c.get(h, "") for h in headers]
     ws1.append(row_data)
     
-    # Make URI and Browser Link active clickable hyperlinks
-    uri_cell = ws1.cell(row=row_idx, column=headers.index("URI") + 1)
-    uri_cell.hyperlink = c["URI"]
-    uri_cell.font = link_font
-
-    link_cell = ws1.cell(row=row_idx, column=headers.index("Browser Link") + 1)
-    link_cell.hyperlink = c["Browser Link"]
-    link_cell.font = link_font
-
     for col_num in range(1, len(headers) + 1):
         ws1.cell(row=row_idx, column=col_num).border = border_thin
 
@@ -398,9 +389,6 @@ RELATIONS = [
 r_idx = 2
 for rel in RELATIONS:
     ws2.append(list(rel))
-    c_link = ws2.cell(row=r_idx, column=6)
-    c_link.hyperlink = rel[5]
-    c_link.font = link_font
     for col_num in range(1, len(h_headers) + 1):
         ws2.cell(row=r_idx, column=col_num).border = border_thin
     r_idx += 1
@@ -437,10 +425,6 @@ XREFS = [
 x_idx = 2
 for xr in XREFS:
     ws3.append(list(xr))
-    if xr[4]:
-        link_cell = ws3.cell(row=x_idx, column=5)
-        link_cell.hyperlink = xr[4]
-        link_cell.font = link_font
     for col_num in range(1, len(xr_headers) + 1):
         ws3.cell(row=x_idx, column=col_num).border = border_thin
     x_idx += 1
