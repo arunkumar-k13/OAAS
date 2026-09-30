@@ -35,7 +35,7 @@ SNOMED_RF2_TABLES = {
     }
 }
 
-# 13 Canonical Native Raw Fields for Extraction & Review (including Direct Browser Link)
+# 14 Canonical Native Raw Fields for Extraction & Review (with Live Verification URLs)
 NATIVE_RAW_FIELDS = [
     "concept_id",
     "fsn",
@@ -47,8 +47,9 @@ NATIVE_RAW_FIELDS = [
     "parent_concept_ids",
     "parent_concept_names",
     "attribute_relationships",
+    "snomed_browser_url",
+    "ncbi_medgen_url",
     "uri",
-    "browser_url",
     "module_id",
     "effective_time"
 ]
@@ -225,28 +226,75 @@ def run_snomed_exploration():
     # Ensure output directory exists
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     out_csv = OUTPUT_DIR / "SNOMED_CT_International_Raw_Sample.csv"
-    downloads_csv = Path.home() / "Downloads" / "SNOMED_CT_International_Raw_Sample.csv"
+    out_xlsx = OUTPUT_DIR / "SNOMED_CT_International_Raw_Sample.xlsx"
+    downloads_dir = Path.home() / "Downloads"
+    downloads_csv = downloads_dir / "SNOMED_CT_International_Raw_Sample.csv"
+    downloads_xlsx = downloads_dir / "SNOMED_CT_International_Raw_Sample.xlsx"
 
-    # Write Sample CSV
-    with open(out_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(NATIVE_RAW_FIELDS)
-        for c in SAMPLE_CONCEPTS:
-            cid = c["concept_id"]
-            c["uri"] = f"http://snomed.info/id/{cid}"
-            c["browser_url"] = f"https://browser.ihtsdotools.org/?perspective=full&conceptId1={cid}&edition=MAIN"
-            row = [c[k] for k in NATIVE_RAW_FIELDS]
-            writer.writerow(row)
+    # Populate verification URLs
+    rows_data = []
+    for c in SAMPLE_CONCEPTS:
+        cid = c["concept_id"]
+        c["snomed_browser_url"] = f"https://browser.ihtsdotools.org/?perspective=full&conceptId1={cid}&edition=MAIN"
+        c["ncbi_medgen_url"] = f"https://www.ncbi.nlm.nih.gov/medgen/?term={cid}"
+        c["uri"] = f"http://snomed.info/id/{cid}"
+        rows_data.append([c[k] for k in NATIVE_RAW_FIELDS])
+
+    # 1. Write Sample CSV
+    try:
+        with open(out_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(NATIVE_RAW_FIELDS)
+            writer.writerows(rows_data)
+    except PermissionError:
+        out_csv = OUTPUT_DIR / "SNOMED_CT_International_Raw_Sample_v2.csv"
+        with open(out_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(NATIVE_RAW_FIELDS)
+            writer.writerows(rows_data)
+        print(f"[NOTE] Previous CSV was open in Excel. Written to {out_csv.name}")
+
+    # 2. Write Sample Excel (.xlsx) with clean text formatting (no 9E+17) and hyperlinks
+    try:
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "SNOMED_CT_Raw_Sample"
+        ws.append(NATIVE_RAW_FIELDS)
+
+        for r in rows_data:
+            ws.append([str(v) for v in r])
+
+        # Style header
+        for col_num, col_title in enumerate(NATIVE_RAW_FIELDS, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.font = openpyxl.styles.Font(bold=True, color="FFFFFF")
+            cell.fill = openpyxl.styles.PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
+
+        try:
+            wb.save(out_xlsx)
+        except PermissionError:
+            out_xlsx = OUTPUT_DIR / "SNOMED_CT_International_Raw_Sample_v2.xlsx"
+            wb.save(out_xlsx)
+        print(f"[SUCCESS] Master Excel Export: {out_xlsx}")
+    except Exception as e:
+        print(f"[NOTE] Excel export skipped: {e}")
 
     # Copy to Downloads
+    import shutil
     try:
-        import shutil
         shutil.copyfile(out_csv, downloads_csv)
-        print(f"\n[SUCCESS] Sample CSV Export Saved to Downloads: {downloads_csv}")
+        print(f"[SUCCESS] CSV Saved to Downloads:   {downloads_csv}")
     except Exception as e:
-        print(f"\n[NOTE] Output saved to: {out_csv} ({e})")
+        print(f"[NOTE] CSV download copy skipped: {e}")
 
-    print(f"[SUCCESS] Master Output CSV: {out_csv}")
+    try:
+        if out_xlsx.exists():
+            shutil.copyfile(out_xlsx, downloads_xlsx)
+            print(f"[SUCCESS] Excel (.xlsx) in Downloads: {downloads_xlsx}")
+    except Exception as e:
+        print(f"[NOTE] Excel download copy skipped: {e}")
+
     print("\n" + "=" * 75)
     print(f"Sample exploration generated with {len(SAMPLE_CONCEPTS)} representative clinical concepts.")
     print("=" * 75 + "\n")
