@@ -35,7 +35,7 @@ SNOMED_RF2_TABLES = {
     }
 }
 
-# 13 Canonical Native Raw Fields for Extraction & Review (featuring Option A: NIH MedGen Direct Link)
+# 14 Canonical Native Raw Fields for Extraction & Review (with EBI OLS & NIH MedGen Links)
 NATIVE_RAW_FIELDS = [
     "concept_id",
     "fsn",
@@ -47,6 +47,7 @@ NATIVE_RAW_FIELDS = [
     "parent_concept_ids",
     "parent_concept_names",
     "attribute_relationships",
+    "ebi_ols_url",
     "verification_url",
     "uri",
     "module_id",
@@ -230,10 +231,11 @@ def run_snomed_exploration():
     downloads_csv = downloads_dir / "SNOMED_CT_International_Raw_Sample.csv"
     downloads_xlsx = downloads_dir / "SNOMED_CT_International_Raw_Sample.xlsx"
 
-    # Populate Option A (NIH NCBI MedGen) verification URL
+    # Populate EBI OLS and NIH NCBI MedGen verification URLs
     rows_data = []
     for c in SAMPLE_CONCEPTS:
         cid = c["concept_id"]
+        c["ebi_ols_url"] = f"https://www.ebi.ac.uk/ols4/ontologies/snomed/classes/http%253A%252F%252Fsnomed.info%252Fid%252F{cid}"
         c["verification_url"] = f"https://www.ncbi.nlm.nih.gov/medgen/?term={cid}"
         c["uri"] = f"http://snomed.info/id/{cid}"
         rows_data.append([c[k] for k in NATIVE_RAW_FIELDS])
