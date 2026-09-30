@@ -35,7 +35,7 @@ SNOMED_RF2_TABLES = {
     }
 }
 
-# 12 Canonical Native Raw Fields for Extraction & Review
+# 13 Canonical Native Raw Fields for Extraction & Review (including Direct Browser Link)
 NATIVE_RAW_FIELDS = [
     "concept_id",
     "fsn",
@@ -47,6 +47,8 @@ NATIVE_RAW_FIELDS = [
     "parent_concept_ids",
     "parent_concept_names",
     "attribute_relationships",
+    "uri",
+    "browser_url",
     "module_id",
     "effective_time"
 ]
@@ -230,6 +232,9 @@ def run_snomed_exploration():
         writer = csv.writer(f)
         writer.writerow(NATIVE_RAW_FIELDS)
         for c in SAMPLE_CONCEPTS:
+            cid = c["concept_id"]
+            c["uri"] = f"http://snomed.info/id/{cid}"
+            c["browser_url"] = f"https://browser.ihtsdotools.org/?perspective=full&conceptId1={cid}&edition=MAIN"
             row = [c[k] for k in NATIVE_RAW_FIELDS]
             writer.writerow(row)
 
