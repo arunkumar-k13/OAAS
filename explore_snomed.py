@@ -35,7 +35,7 @@ SNOMED_RF2_TABLES = {
     }
 }
 
-# 14 Canonical Native Raw Fields for Extraction & Review (with Live Verification URLs)
+# 13 Canonical Native Raw Fields for Extraction & Review (featuring Option A: NIH MedGen Direct Link)
 NATIVE_RAW_FIELDS = [
     "concept_id",
     "fsn",
@@ -47,8 +47,7 @@ NATIVE_RAW_FIELDS = [
     "parent_concept_ids",
     "parent_concept_names",
     "attribute_relationships",
-    "snomed_browser_url",
-    "ncbi_medgen_url",
+    "verification_url",
     "uri",
     "module_id",
     "effective_time"
@@ -231,12 +230,11 @@ def run_snomed_exploration():
     downloads_csv = downloads_dir / "SNOMED_CT_International_Raw_Sample.csv"
     downloads_xlsx = downloads_dir / "SNOMED_CT_International_Raw_Sample.xlsx"
 
-    # Populate verification URLs
+    # Populate Option A (NIH NCBI MedGen) verification URL
     rows_data = []
     for c in SAMPLE_CONCEPTS:
         cid = c["concept_id"]
-        c["snomed_browser_url"] = f"https://browser.ihtsdotools.org/?perspective=full&conceptId1={cid}&edition=MAIN"
-        c["ncbi_medgen_url"] = f"https://www.ncbi.nlm.nih.gov/medgen/?term={cid}"
+        c["verification_url"] = f"https://www.ncbi.nlm.nih.gov/medgen/?term={cid}"
         c["uri"] = f"http://snomed.info/id/{cid}"
         rows_data.append([c[k] for k in NATIVE_RAW_FIELDS])
 
@@ -247,7 +245,9 @@ def run_snomed_exploration():
             writer.writerow(NATIVE_RAW_FIELDS)
             writer.writerows(rows_data)
     except PermissionError:
-        out_csv = OUTPUT_DIR / "SNOMED_CT_International_Raw_Sample_v2.csv"
+        import time
+        ts = int(time.time())
+        out_csv = OUTPUT_DIR / f"SNOMED_CT_International_Raw_Sample_{ts}.csv"
         with open(out_csv, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(NATIVE_RAW_FIELDS)
@@ -274,7 +274,9 @@ def run_snomed_exploration():
         try:
             wb.save(out_xlsx)
         except PermissionError:
-            out_xlsx = OUTPUT_DIR / "SNOMED_CT_International_Raw_Sample_v2.xlsx"
+            import time
+            ts = int(time.time())
+            out_xlsx = OUTPUT_DIR / f"SNOMED_CT_International_Raw_Sample_{ts}.xlsx"
             wb.save(out_xlsx)
         print(f"[SUCCESS] Master Excel Export: {out_xlsx}")
     except Exception as e:
